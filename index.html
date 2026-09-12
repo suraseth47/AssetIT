@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบทะเบียนอุปกรณ์ไอที</title>
+<style>
+  body {
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    background-color: #f4f6f8;
+    color: #222;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 {
+    font-size: 22px;
+    margin-bottom: 20px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .card h2 {
+    font-size: 16px;
+    margin-top: 0;
+    margin-bottom: 16px;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 4px;
+    color: #555;
+  }
+  input, select {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+  button {
+    margin-top: 16px;
+    padding: 10px 20px;
+    background-color: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button:hover {
+    background-color: #1d4ed8;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 8px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  th {
+    background-color: #f9fafb;
+    color: #444;
+  }
+  .empty-row td {
+    text-align: center;
+    color: #999;
+    padding: 20px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>ระบบทะเบียนอุปกรณ์ไอที</h1>
+
+  <div class="card">
+    <h2>เพิ่มอุปกรณ์ใหม่</h2>
+    <form id="assetForm">
+      <div class="form-grid">
+        <div>
+          <label for="brandModel">ชื่ออุปกรณ์</label>
+          <input type="text" id="brandModel" required>
+        </div>
+        <div>
+          <label for="category">ประเภท</label>
+          <select id="category" required>
+            <option value="Laptop">โน้ตบุ๊ก</option>
+            <option value="Monitor">จอภาพ</option>
+            <option value="Printer">เครื่องพิมพ์</option>
+            <option value="Switch">สวิตช์</option>
+            <option value="CCTV">กล้องวงจรปิด</option>
+            <option value="Other">อื่น ๆ</option>
+          </select>
+        </div>
+        <div>
+          <label for="serialNumber">หมายเลขเครื่อง</label>
+          <input type="text" id="serialNumber" required>
+        </div>
+        <div>
+          <label for="assignedTo">ผู้ถือครอง</label>
+          <input type="text" id="assignedTo">
+        </div>
+        <div>
+          <label for="status">สถานะ</label>
+          <select id="status" required>
+            <option value="InUse">กำลังใช้งาน</option>
+            <option value="UnderRepair">ซ่อมอยู่</option>
+            <option value="Spare">สำรอง</option>
+            <option value="Retired">ปลดระวาง</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit">บันทึกอุปกรณ์</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>รายการอุปกรณ์ทั้งหมด</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ชื่ออุปกรณ์</th>
+          <th>ประเภท</th>
+          <th>หมายเลขเครื่อง</th>
+          <th>ผู้ถือครอง</th>
+          <th>สถานะ</th>
+        </tr>
+      </thead>
+      <tbody id="assetTableBody">
+      </tbody>
+    </table>
+  </div>
+
+<script>
+  // ชื่อ key ที่ใช้เก็บข้อมูลอุปกรณ์ทั้งหมดใน localStorage
+  const STORAGE_KEY = "assets";
+
+  // แปลงค่า enum เป็นข้อความภาษาไทยสำหรับแสดงผลในตาราง
+  const categoryLabels = {
+    Laptop: "โน้ตบุ๊ก",
+    Monitor: "จอภาพ",
+    Printer: "เครื่องพิมพ์",
+    Switch: "สวิตช์",
+    CCTV: "กล้องวงจรปิด",
+    Other: "อื่น ๆ"
+  };
+
+  const statusLabels = {
+    InUse: "กำลังใช้งาน",
+    UnderRepair: "ซ่อมอยู่",
+    Spare: "สำรอง",
+    Retired: "ปลดระวาง"
+  };
+
+  function loadAssets() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }
+
+  function saveAssets(assets) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(assets));
+  }
+
+  // สร้างรหัสครุภัณฑ์อัตโนมัติ รูปแบบ IT-ปีปัจจุบัน-ลำดับ
+  function generateAssetId(existingAssets) {
+    const year = new Date().getFullYear();
+    const sameYearCount = existingAssets.filter(a => a.assetId.startsWith(`IT-${year}-`)).length;
+    const sequence = String(sameYearCount + 1).padStart(3, "0");
+    return `IT-${year}-${sequence}`;
+  }
+
+  function renderAssetTable() {
+    const assets = loadAssets();
+    const tbody = document.getElementById("assetTableBody");
+    tbody.innerHTML = "";
+
+    if (assets.length === 0) {
+      const emptyRow = document.createElement("tr");
+      emptyRow.className = "empty-row";
+      emptyRow.innerHTML = `<td colspan="5">ยังไม่มีข้อมูลอุปกรณ์</td>`;
+      tbody.appendChild(emptyRow);
+      return;
+    }
+
+    assets.forEach(asset => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${asset.brandModel}</td>
+        <td>${categoryLabels[asset.category] || asset.category}</td>
+        <td>${asset.serialNumber}</td>
+        <td>${asset.assignedTo || "-"}</td>
+        <td>${statusLabels[asset.status] || asset.status}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
+
+  document.getElementById("assetForm").addEventListener("submit", function (event) {
+    event.preventDefault();
+
+    const assets = loadAssets();
+    const now = new Date().toISOString();
+
+    const newAsset = {
+      assetId: generateAssetId(assets),
+      category: document.getElementById("category").value,
+      brandModel: document.getElementById("brandModel").value.trim(),
+      serialNumber: document.getElementById("serialNumber").value.trim(),
+      assignedTo: document.getElementById("assignedTo").value.trim(),
+      location: "",
+      status: document.getElementById("status").value,
+      purchaseDate: "",
+      warrantyExpiry: "",
+      cost: null,
+      photo: "",
+      notes: "",
+      createdAt: now,
+      updatedAt: now
+    };
+
+    assets.push(newAsset);
+    saveAssets(assets);
+    renderAssetTable();
+    event.target.reset();
+  });
+
+  renderAssetTable();
+</script>
+
+</body>
+</html>
