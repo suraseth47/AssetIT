@@ -79,6 +79,17 @@
     color: #999;
     padding: 20px;
   }
+  .filter-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .result-count {
+    font-size: 13px;
+    color: #666;
+    margin: 0 0 12px;
+  }
 </style>
 </head>
 <body>
@@ -128,6 +139,35 @@
 
   <div class="card">
     <h2>รายการอุปกรณ์ทั้งหมด</h2>
+    <div class="filter-bar">
+      <div>
+        <label for="searchInput">ค้นหา (ชื่ออุปกรณ์ / หมายเลขเครื่อง / ผู้ถือครอง)</label>
+        <input type="text" id="searchInput" placeholder="พิมพ์เพื่อค้นหา...">
+      </div>
+      <div>
+        <label for="filterCategory">ประเภท</label>
+        <select id="filterCategory">
+          <option value="">ทั้งหมด</option>
+          <option value="Laptop">โน้ตบุ๊ก</option>
+          <option value="Monitor">จอภาพ</option>
+          <option value="Printer">เครื่องพิมพ์</option>
+          <option value="Switch">สวิตช์</option>
+          <option value="CCTV">กล้องวงจรปิด</option>
+          <option value="Other">อื่น ๆ</option>
+        </select>
+      </div>
+      <div>
+        <label for="filterStatus">สถานะ</label>
+        <select id="filterStatus">
+          <option value="">ทั้งหมด</option>
+          <option value="InUse">กำลังใช้งาน</option>
+          <option value="UnderRepair">ซ่อมอยู่</option>
+          <option value="Spare">สำรอง</option>
+          <option value="Retired">ปลดระวาง</option>
+        </select>
+      </div>
+    </div>
+    <p id="resultCount" class="result-count"></p>
     <table>
       <thead>
         <tr>
@@ -181,12 +221,34 @@
     return `IT-${year}-${sequence}`;
   }
 
-  function renderAssetTable() {
+  // กรองอุปกรณ์ตามคำค้นหาและตัวเลือกที่เลือกในแถบกรอง
+  function getFilteredAssets() {
     const assets = loadAssets();
+    const keyword = document.getElementById("searchInput").value.trim().toLowerCase();
+    const category = document.getElementById("filterCategory").value;
+    const status = document.getElementById("filterStatus").value;
+
+    return assets.filter(asset => {
+      const matchesKeyword = !keyword ||
+        (asset.brandModel || "").toLowerCase().includes(keyword) ||
+        (asset.serialNumber || "").toLowerCase().includes(keyword) ||
+        (asset.assignedTo || "").toLowerCase().includes(keyword);
+      const matchesCategory = !category || asset.category === category;
+      const matchesStatus = !status || asset.status === status;
+      return matchesKeyword && matchesCategory && matchesStatus;
+    });
+  }
+
+  function renderAssetTable() {
+    const allAssets = loadAssets();
+    const filteredAssets = getFilteredAssets();
     const tbody = document.getElementById("assetTableBody");
     tbody.innerHTML = "";
 
-    if (assets.length === 0) {
+    document.getElementById("resultCount").textContent =
+      `พบ ${filteredAssets.length} จาก ${allAssets.length} รายการ`;
+
+    if (allAssets.length === 0) {
       const emptyRow = document.createElement("tr");
       emptyRow.className = "empty-row";
       emptyRow.innerHTML = `<td colspan="5">ยังไม่มีข้อมูลอุปกรณ์</td>`;
@@ -194,7 +256,15 @@
       return;
     }
 
-    assets.forEach(asset => {
+    if (filteredAssets.length === 0) {
+      const noResultRow = document.createElement("tr");
+      noResultRow.className = "empty-row";
+      noResultRow.innerHTML = `<td colspan="5">ไม่พบข้อมูลที่ตรงกับการค้นหา</td>`;
+      tbody.appendChild(noResultRow);
+      return;
+    }
+
+    filteredAssets.forEach(asset => {
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>${asset.brandModel}</td>
@@ -235,6 +305,10 @@
     renderAssetTable();
     event.target.reset();
   });
+
+  document.getElementById("searchInput").addEventListener("input", renderAssetTable);
+  document.getElementById("filterCategory").addEventListener("change", renderAssetTable);
+  document.getElementById("filterStatus").addEventListener("change", renderAssetTable);
 
   renderAssetTable();
 </script>
