@@ -60,6 +60,28 @@
   button:hover {
     background-color: #1d4ed8;
   }
+  button.btn-secondary {
+    background-color: #6b7280;
+    margin-left: 8px;
+  }
+  button.btn-secondary:hover {
+    background-color: #4b5563;
+  }
+  .action-buttons {
+    display: flex;
+    gap: 6px;
+  }
+  .btn-edit, .btn-delete {
+    margin-top: 0;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .btn-delete {
+    background-color: #dc2626;
+  }
+  .btn-delete:hover {
+    background-color: #b91c1c;
+  }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -78,6 +100,17 @@
     text-align: center;
     color: #999;
     padding: 20px;
+  }
+  .filter-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .result-count {
+    font-size: 13px;
+    color: #666;
+    margin: 0 0 12px;
   }
 </style>
 </head>
@@ -122,12 +155,42 @@
           </select>
         </div>
       </div>
-      <button type="submit">บันทึกอุปกรณ์</button>
+      <button type="submit" id="submitBtn">บันทึกอุปกรณ์</button>
+      <button type="button" id="cancelEditBtn" class="btn-secondary" style="display:none;">ยกเลิกการแก้ไข</button>
     </form>
   </div>
 
   <div class="card">
     <h2>รายการอุปกรณ์ทั้งหมด</h2>
+    <div class="filter-bar">
+      <div>
+        <label for="searchInput">ค้นหา (ชื่ออุปกรณ์ / หมายเลขเครื่อง / ผู้ถือครอง)</label>
+        <input type="text" id="searchInput" placeholder="พิมพ์เพื่อค้นหา...">
+      </div>
+      <div>
+        <label for="filterCategory">ประเภท</label>
+        <select id="filterCategory">
+          <option value="">ทั้งหมด</option>
+          <option value="Laptop">โน้ตบุ๊ก</option>
+          <option value="Monitor">จอภาพ</option>
+          <option value="Printer">เครื่องพิมพ์</option>
+          <option value="Switch">สวิตช์</option>
+          <option value="CCTV">กล้องวงจรปิด</option>
+          <option value="Other">อื่น ๆ</option>
+        </select>
+      </div>
+      <div>
+        <label for="filterStatus">สถานะ</label>
+        <select id="filterStatus">
+          <option value="">ทั้งหมด</option>
+          <option value="InUse">กำลังใช้งาน</option>
+          <option value="UnderRepair">ซ่อมอยู่</option>
+          <option value="Spare">สำรอง</option>
+          <option value="Retired">ปลดระวาง</option>
+        </select>
+      </div>
+    </div>
+    <p id="resultCount" class="result-count"></p>
     <table>
       <thead>
         <tr>
@@ -136,6 +199,7 @@
           <th>หมายเลขเครื่อง</th>
           <th>ผู้ถือครอง</th>
           <th>สถานะ</th>
+          <th>จัดการ</th>
         </tr>
       </thead>
       <tbody id="assetTableBody">
@@ -146,6 +210,9 @@
 <script>
   // ชื่อ key ที่ใช้เก็บข้อมูลอุปกรณ์ทั้งหมดใน localStorage
   const STORAGE_KEY = "assets";
+
+  // เก็บ assetId ของรายการที่กำลังแก้ไขอยู่ (null = โหมดเพิ่มใหม่)
+  let editingAssetId = null;
 
   // แปลงค่า enum เป็นข้อความภาษาไทยสำหรับแสดงผลในตาราง
   const categoryLabels = {
@@ -181,20 +248,50 @@
     return `IT-${year}-${sequence}`;
   }
 
-  function renderAssetTable() {
+  // กรองอุปกรณ์ตามคำค้นหาและตัวเลือกที่เลือกในแถบกรอง
+  function getFilteredAssets() {
     const assets = loadAssets();
+    const keyword = document.getElementById("searchInput").value.trim().toLowerCase();
+    const category = document.getElementById("filterCategory").value;
+    const status = document.getElementById("filterStatus").value;
+
+    return assets.filter(asset => {
+      const matchesKeyword = !keyword ||
+        (asset.brandModel || "").toLowerCase().includes(keyword) ||
+        (asset.serialNumber || "").toLowerCase().includes(keyword) ||
+        (asset.assignedTo || "").toLowerCase().includes(keyword);
+      const matchesCategory = !category || asset.category === category;
+      const matchesStatus = !status || asset.status === status;
+      return matchesKeyword && matchesCategory && matchesStatus;
+    });
+  }
+
+  function renderAssetTable() {
+    const allAssets = loadAssets();
+    const filteredAssets = getFilteredAssets();
     const tbody = document.getElementById("assetTableBody");
     tbody.innerHTML = "";
 
-    if (assets.length === 0) {
+    document.getElementById("resultCount").textContent =
+      `พบ ${filteredAssets.length} จาก ${allAssets.length} รายการ`;
+
+    if (allAssets.length === 0) {
       const emptyRow = document.createElement("tr");
       emptyRow.className = "empty-row";
-      emptyRow.innerHTML = `<td colspan="5">ยังไม่มีข้อมูลอุปกรณ์</td>`;
+      emptyRow.innerHTML = `<td colspan="6">ยังไม่มีข้อมูลอุปกรณ์</td>`;
       tbody.appendChild(emptyRow);
       return;
     }
 
-    assets.forEach(asset => {
+    if (filteredAssets.length === 0) {
+      const noResultRow = document.createElement("tr");
+      noResultRow.className = "empty-row";
+      noResultRow.innerHTML = `<td colspan="6">ไม่พบข้อมูลที่ตรงกับการค้นหา</td>`;
+      tbody.appendChild(noResultRow);
+      return;
+    }
+
+    filteredAssets.forEach(asset => {
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>${asset.brandModel}</td>
@@ -202,16 +299,95 @@
         <td>${asset.serialNumber}</td>
         <td>${asset.assignedTo || "-"}</td>
         <td>${statusLabels[asset.status] || asset.status}</td>
+        <td>
+          <div class="action-buttons">
+            <button type="button" class="btn-edit" data-id="${asset.assetId}">แก้ไข</button>
+            <button type="button" class="btn-delete" data-id="${asset.assetId}">ลบ</button>
+          </div>
+        </td>
       `;
       tbody.appendChild(row);
     });
   }
+
+  // เติมข้อมูลอุปกรณ์ลงในฟอร์มเพื่อเข้าสู่โหมดแก้ไข
+  function startEditAsset(assetId) {
+    const assets = loadAssets();
+    const asset = assets.find(a => a.assetId === assetId);
+    if (!asset) return;
+
+    editingAssetId = assetId;
+    document.getElementById("brandModel").value = asset.brandModel || "";
+    document.getElementById("category").value = asset.category || "Laptop";
+    document.getElementById("serialNumber").value = asset.serialNumber || "";
+    document.getElementById("assignedTo").value = asset.assignedTo || "";
+    document.getElementById("status").value = asset.status || "InUse";
+
+    document.getElementById("submitBtn").textContent = "บันทึกการแก้ไข";
+    document.getElementById("cancelEditBtn").style.display = "inline-block";
+  }
+
+  // ยกเลิกโหมดแก้ไขแล้วกลับไปเป็นฟอร์มเพิ่มอุปกรณ์ใหม่
+  function cancelEdit() {
+    editingAssetId = null;
+    document.getElementById("assetForm").reset();
+    document.getElementById("submitBtn").textContent = "บันทึกอุปกรณ์";
+    document.getElementById("cancelEditBtn").style.display = "none";
+  }
+
+  // ลบอุปกรณ์ตาม assetId หลังจากยืนยันกับผู้ใช้แล้ว
+  function deleteAssetById(assetId) {
+    const assets = loadAssets();
+    const asset = assets.find(a => a.assetId === assetId);
+    if (!asset) return;
+
+    const confirmed = confirm(`ต้องการลบ "${asset.brandModel}" (${asset.assetId}) ใช่หรือไม่?`);
+    if (!confirmed) return;
+
+    const updatedAssets = assets.filter(a => a.assetId !== assetId);
+    saveAssets(updatedAssets);
+
+    if (editingAssetId === assetId) {
+      cancelEdit();
+    }
+    renderAssetTable();
+  }
+
+  document.getElementById("assetTableBody").addEventListener("click", function (event) {
+    const target = event.target;
+    const assetId = target.getAttribute("data-id");
+    if (!assetId) return;
+
+    if (target.classList.contains("btn-edit")) {
+      startEditAsset(assetId);
+    } else if (target.classList.contains("btn-delete")) {
+      deleteAssetById(assetId);
+    }
+  });
+
+  document.getElementById("cancelEditBtn").addEventListener("click", cancelEdit);
 
   document.getElementById("assetForm").addEventListener("submit", function (event) {
     event.preventDefault();
 
     const assets = loadAssets();
     const now = new Date().toISOString();
+
+    if (editingAssetId) {
+      const asset = assets.find(a => a.assetId === editingAssetId);
+      if (asset) {
+        asset.category = document.getElementById("category").value;
+        asset.brandModel = document.getElementById("brandModel").value.trim();
+        asset.serialNumber = document.getElementById("serialNumber").value.trim();
+        asset.assignedTo = document.getElementById("assignedTo").value.trim();
+        asset.status = document.getElementById("status").value;
+        asset.updatedAt = now;
+        saveAssets(assets);
+      }
+      cancelEdit();
+      renderAssetTable();
+      return;
+    }
 
     const newAsset = {
       assetId: generateAssetId(assets),
@@ -235,6 +411,10 @@
     renderAssetTable();
     event.target.reset();
   });
+
+  document.getElementById("searchInput").addEventListener("input", renderAssetTable);
+  document.getElementById("filterCategory").addEventListener("change", renderAssetTable);
+  document.getElementById("filterStatus").addEventListener("change", renderAssetTable);
 
   renderAssetTable();
 </script>
